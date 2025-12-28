@@ -1,10 +1,9 @@
-
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  // 根據您的倉庫名稱調整，確保在 GitHub Pages 上路徑正確
+  // 確保 base 路徑與您的 repository 名稱一致
   base: '/designpro-ai/',
   build: {
     outDir: 'dist',
@@ -12,13 +11,15 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'recharts', 'lucide-react'],
+          vendor: ['react', 'react-dom', 'lucide-react'],
+          charts: ['recharts'],
           gemini: ['@google/genai']
         }
       }
     }
   },
   define: {
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    // 增加空值保護
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
   }
 });
