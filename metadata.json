@@ -1,0 +1,7 @@
+{
+  "name": "DesignPro AI Assistant",
+  "description": "A comprehensive voice-driven AI assistant for architects, interior designers, and visual artists to manage projects, Google Workspace, and finances.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
