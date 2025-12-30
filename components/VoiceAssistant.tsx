@@ -1,6 +1,8 @@
 
 import React, { useState, useRef, useCallback } from 'react';
-import { GoogleGenAI, Modality, Type, LiveServerMessage, FunctionDeclaration } from '@google/genai';
+// Fix: Use correct import format for GoogleGenAI as per guidelines
+import {GoogleGenAI, Modality, Type} from "@google/genai";
+import type { LiveServerMessage, FunctionDeclaration, Blob } from '@google/genai';
 
 // Audio decoding and encoding helpers as per Gemini API guidelines
 function decode(base64: string) {
@@ -95,7 +97,7 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ onToolCall }) => {
   // Function to stop the session and cleanup resources
   const stopSession = useCallback(() => {
     if (sessionRef.current) {
-      // In a real implementation we would call session.close() if available
+      sessionRef.current.close();
       sessionRef.current = null;
     }
     setIsListening(false);
@@ -151,7 +153,7 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ onToolCall }) => {
               for (let i = 0; i < l; i++) {
                 int16[i] = inputData[i] * 32768;
               }
-              const pcmBlob = {
+              const pcmBlob: Blob = {
                 data: encode(new Uint8Array(int16.buffer)),
                 mimeType: 'audio/pcm;rate=16000',
               };
@@ -209,10 +211,6 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ onToolCall }) => {
                   });
                 });
               }
-            }
-            
-            if (message.serverContent?.turnComplete) {
-              // Current turn finished
             }
           },
           onerror: (e) => {

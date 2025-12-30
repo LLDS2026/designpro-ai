@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
 import { Project, ToolAction, AIInsight } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { BrainCircuit, Zap, TrendingUp, Lightbulb, ChevronRight, Activity, ShieldCheck, Cpu, Globe, Mic, ImageIcon, FolderKanban, Loader2, Check, Search, ExternalLink } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+// Fix: Follow guidelines for GoogleGenAI import format
+import {GoogleGenAI} from "@google/genai";
 
 interface DashboardProps {
   projects: Project[];

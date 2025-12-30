@@ -1,7 +1,12 @@
 
-import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeApp, getApp, getApps } from 'firebase/app';
+import type { FirebaseApp } from 'firebase/app';
+// Fix: Separate type and value imports for Firebase Auth
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import type { Auth } from 'firebase/auth';
+// Fix: Separate type and value imports for Firestore
+import { getFirestore } from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 
 // These values are injected by vite.config.ts at build time from GitHub Secrets
 const firebaseConfig = {

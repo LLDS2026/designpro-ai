@@ -9,8 +9,11 @@ import SystemLab from './components/SystemLab';
 import CreativeSuite from './components/CreativeSuite';
 import { Key, Globe2, BellRing, X, ShieldCheck, Info, Loader2, AlertTriangle, ExternalLink, RefreshCw, PartyPopper, Rocket, CheckCircle2, Circle } from 'lucide-react';
 import { auth, db, googleProvider, hasValidConfig, firebaseConfig } from './firebase';
-import { signInWithPopup, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { collection, onSnapshot, query, doc, setDoc, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
+// Fix: Separate type and value imports for Firebase Auth to resolve compilation errors
+import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import type { User } from 'firebase/auth';
+// Fix: Use correct modular imports for Firestore and separate types if needed
+import { collection, onSnapshot, query, doc, setDoc, addDoc, orderBy, limit } from 'firebase/firestore';
 
 interface Notification {
   id: string;
