@@ -3,7 +3,10 @@ import { initializeApp, getApp, getApps, type FirebaseApp } from '@firebase/app'
 import { getAuth, GoogleAuthProvider, type Auth } from '@firebase/auth';
 import { getFirestore, type Firestore } from '@firebase/firestore';
 
-// 必須使用靜態字串存取，Vite 才能在 Build 時正確替換值
+/**
+ * 重要說明：Vite 在 Build 期間會掃描程式碼中的 "import.meta.env.VITE_..." 字串。
+ * 不能使用動態 Key 或變數代入，否則編譯器無法進行靜態替換。
+ */
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
@@ -13,7 +16,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
 };
 
-// 容錯檢查：如果是在非 Vite 環境或 AI Studio 預覽環境
+// 只有在靜態讀取失敗（非 Vite 環境）時才嘗試 process.env (用於本地開發或 Studio 預覽)
 if (!firebaseConfig.apiKey && typeof process !== 'undefined' && process.env) {
   firebaseConfig.apiKey = process.env.FIREBASE_API_KEY || '';
   firebaseConfig.authDomain = process.env.FIREBASE_AUTH_DOMAIN || '';
@@ -39,6 +42,7 @@ if (hasValidConfig) {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     db = getFirestore(app);
+    console.log("Firebase initialized successfully");
   } catch (error) {
     console.error("Firebase Initialization Error:", error);
   }
