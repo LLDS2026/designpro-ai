@@ -7,7 +7,10 @@ import VoiceAssistant from './components/VoiceAssistant';
 import ProjectDetails from './components/ProjectDetails';
 import SystemLab from './components/SystemLab';
 import CreativeSuite from './components/CreativeSuite';
-import { Key, Globe2, BellRing, X, ShieldCheck, Info } from 'lucide-react';
+import { Key, Globe2, BellRing, X, ShieldCheck, Info, Loader2, AlertTriangle, ExternalLink, RefreshCw, PartyPopper, Rocket, CheckCircle2, Circle } from 'lucide-react';
+import { auth, db, googleProvider, hasValidConfig, firebaseConfig } from './firebase';
+import { signInWithPopup, onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { collection, onSnapshot, query, doc, setDoc, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 
 interface Notification {
   id: string;
@@ -18,134 +21,113 @@ interface Notification {
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'files' | 'finance' | 'lab' | 'creative'>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [isCloudConnected, setIsCloudConnected] = useState(false);
-  const [userProfile, setUserProfile] = useState<{name?: string, email?: string} | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   
-  const hasApiKey = !!process.env.API_KEY;
-  
-  const [projects, setProjects] = useState<Project[]>([
-    { 
-      id: '1', 
-      name: '藍潭案', 
-      type: ProjectType.INTERIOR, 
-      status: '施工中', 
-      progress: 65, 
-      lastUpdate: '2023-10-25', 
-      efficiencyScore: 82,
-      phases: ['案場丈量', '平面配置', '3D渲染', '施工報價', '進場施工', '軟裝驗收']
-    },
-    { 
-      id: '2', 
-      name: '台北商辦總部', 
-      type: ProjectType.ARCHITECTURAL, 
-      status: '規畫設計', 
-      progress: 30, 
-      lastUpdate: '2023-10-24', 
-      efficiencyScore: 95,
-      phases: ['開發評估', '法規檢討', '規畫設計', '請照繪製', '建照申請', '施工營造', '使照申請']
-    },
-  ]);
-
+  const [projects, setProjects] = useState<Project[]>([]);
   const [actions, setActions] = useState<ToolAction[]>([]);
-  const [insights] = useState<AIInsight[]>([
-    {
-      id: 'i1',
-      type: 'optimization',
-      title: '流程自動化建議',
-      description: '分析過去 3 次室內設計案，您在「進場施工」後通常會立刻搜尋「石材圖庫」。是否設定為自動執行？',
-      impact: '預計節省 15 分鐘',
-      actionLabel: '啟用智慧工作流'
+  const [insights, setInsights] = useState<AIInsight[]>([]);
+  
+  const hasGeminiKey = !!process.env.API_KEY && process.env.API_KEY !== '';
+  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname.includes('aistudio.google.com');
+
+  useEffect(() => {
+    if (!auth || !db) return;
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        setIsDemoMode(false);
+        const qProjects = query(collection(db, `users/${currentUser.uid}/projects`));
+        const unsubProjects = onSnapshot(qProjects, (snapshot) => {
+          const projs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Project));
+          setProjects(projs);
+          if (projs.length === 0) initializeUserFirstProject(currentUser.uid);
+        });
+
+        const qActions = query(
+          collection(db, `users/${currentUser.uid}/activity_logs`),
+          orderBy('timestamp', 'desc'),
+          limit(10)
+        );
+        const unsubActions = onSnapshot(qActions, (snapshot) => {
+          setActions(snapshot.docs.map(doc => doc.data() as ToolAction));
+        });
+
+        return () => {
+          unsubProjects();
+          unsubActions();
+        };
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const initializeUserFirstProject = async (uid: string) => {
+    if (!db) return;
+    const firstProject = {
+      name: '新設計案 (歡迎使用)',
+      type: ProjectType.INTERIOR,
+      status: '規劃中',
+      progress: 0,
+      lastUpdate: new Date().toISOString().split('T')[0],
+      efficiencyScore: 100,
+      phases: ['案場丈量', '平面配置', '設計提案']
+    };
+    await addDoc(collection(db, `users/${uid}/projects`), firstProject);
+  };
+
+  const handleLogin = async () => {
+    if (!hasValidConfig || !auth) {
+      showNotification("金鑰偵測失敗，請檢查 GitHub Secrets。", "warning");
+      return;
     }
-  ]);
+    
+    setIsLoggingIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      showNotification("連線成功！歡迎進入雲端 OS。", "success");
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        showNotification("網域未授權！請至 Firebase 設定 Authorized Domains。", "warning");
+      } else {
+        showNotification("登入失敗，請確認 Firebase 設定或網路連線。", "warning");
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const showNotification = useCallback((message: string, type: 'success' | 'info' | 'warning' = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
     setNotifications(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 4000);
+    }, 5000);
   }, []);
-
-  const addAction = useCallback((action: ToolAction) => {
-    setActions(prev => [action, ...prev].slice(0, 10));
-  }, []);
-
-  const handleInsightAction = useCallback((insight: AIInsight) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setProjects(prev => prev.map(p => {
-      if (p.id === '1' && !p.phases.includes('AI 自動化：石材圖庫預選')) {
-        const newPhases = [...p.phases];
-        const insertIdx = newPhases.indexOf('進場施工') + 1;
-        newPhases.splice(insertIdx, 0, 'AI 自動化：石材圖庫預選');
-        return { ...p, phases: newPhases, efficiencyScore: 94 };
-      }
-      return p;
-    }));
-    addAction({
-      type: 'workflow',
-      action: `自動化任務已部署: ${insight.title}`,
-      details: 'AI 已在「藍潭案」流程中動態插入了自動化石材預選決策點。',
-      timestamp
-    });
-    showNotification("智慧工作流部署成功！專案流程已動態更新。", "success");
-  }, [addAction, showNotification]);
-
-  const handleUpdateWorkflow = (projectId: string, newPhases: string[]) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, phases: newPhases } : p));
-    showNotification("專案流程地圖已儲存並同步", "success");
-  };
-
-  const enableDemoCloud = useCallback(() => {
-    const timestamp = new Date().toLocaleTimeString();
-    setIsCloudConnected(true);
-    setIsDemoMode(true);
-    setUserProfile({ name: 'Guest Designer', email: 'guest@designpro.ai' });
-    addAction({ 
-      type: 'system', 
-      action: '啟動展示環境', 
-      details: '系統已進入沙盒模式，模擬所有雲端數據同步與 AI 回饋。', 
-      timestamp 
-    });
-    showNotification("已切換至展示模式：雲端功能模擬中", "warning");
-  }, [addAction, showNotification]);
-
-  const initCloudConnection = useCallback(() => {
-    enableDemoCloud();
-  }, [enableDemoCloud]);
-
-  const handleToolCall = useCallback((tool: string, args: any) => {
-    const timestamp = new Date().toLocaleTimeString();
-    if (tool === 'connect_cloud') {
-      initCloudConnection();
-      return { status: 'ok', provider: 'google_workspace' };
-    }
-    if (tool === 'manage_calendar') {
-      addAction({ type: 'calendar', action: '建立排程', details: `${args.eventTitle} (專案: ${args.projectName})`, timestamp });
-      showNotification(`已建立日曆事件：${args.eventTitle}`, "success");
-      return { status: 'scheduled' };
-    }
-    return { status: 'success' };
-  }, [initCloudConnection, addAction, showNotification]);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const githubPagesUrl = `https://${window.location.pathname.split('/')[1]}.github.io/designpro-ai/`;
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F5F5F7]">
-      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-3 w-full max-w-sm pointer-events-none">
+      {/* Notifications */}
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[400] flex flex-col gap-3 w-full max-w-md pointer-events-none">
         {notifications.map(n => (
-          <div key={n.id} className={`flex items-center justify-between p-4 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in slide-in-from-top-4 duration-500 pointer-events-auto ${
-            n.type === 'success' ? 'bg-[#34C759]/90 border-green-200 text-white' :
-            n.type === 'warning' ? 'bg-[#FF9500]/90 border-amber-200 text-white' :
-            'bg-[#007AFF]/90 border-blue-200 text-white'
+          <div key={n.id} className={`flex items-center justify-between p-5 rounded-2xl shadow-2xl border backdrop-blur-2xl animate-in slide-in-from-top-4 duration-500 pointer-events-auto ${
+            n.type === 'success' ? 'bg-[#34C759] border-green-300 text-white' :
+            n.type === 'warning' ? 'bg-[#FF9500] border-amber-300 text-white' :
+            'bg-[#007AFF] border-blue-300 text-white'
           }`}>
-            <div className="flex items-center gap-3">
-              <BellRing size={16} />
-              <span className="text-sm font-bold tracking-tight">{n.message}</span>
+            <div className="flex items-center gap-4">
+              {n.type === 'success' ? <PartyPopper size={20} className="animate-bounce" /> : <BellRing size={20} />}
+              <span className="text-sm font-black tracking-tight">{n.message}</span>
             </div>
             <button onClick={() => setNotifications(prev => prev.filter(i => i.id !== n.id))}>
-              <X size={14} className="opacity-60 hover:opacity-100" />
+              <X size={16} className="opacity-60 hover:opacity-100" />
             </button>
           </div>
         ))}
@@ -154,43 +136,99 @@ const App: React.FC = () => {
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={(tab) => { setActiveTab(tab); setSelectedProjectId(null); }} 
-        isCloudConnected={isCloudConnected}
+        isCloudConnected={!!user}
         isDemoMode={isDemoMode}
-        onConnect={initCloudConnection}
-        onEnableDemo={enableDemoCloud}
+        onConnect={handleLogin}
+        onLogout={() => auth && signOut(auth)}
+        onEnableDemo={() => { setIsDemoMode(true); setUser(null); }}
       />
 
       <main className="flex-1 flex flex-col relative overflow-hidden">
-        {!hasApiKey && !isDemoMode && (
-          <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-lg flex items-center justify-center p-10">
-            <div className="bg-white rounded-[48px] shadow-2xl p-14 max-w-xl w-full border border-gray-100 flex flex-col items-center text-center animate-in zoom-in-95 duration-500">
-              <div className="w-20 h-20 bg-blue-600 rounded-[28px] flex items-center justify-center text-white mb-10 shadow-2xl shadow-blue-200 ring-8 ring-blue-50">
-                <Key size={36} />
-              </div>
-              <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tighter uppercase">系統部署準備就緒</h2>
-              <p className="text-gray-500 mb-10 font-medium leading-relaxed max-w-md">
-                DesignPro 已準備好為您的設計工作賦能。請先在 GitHub Secrets 設定金鑰，或直接使用 **訪客展示模式** 搶先體驗所有介面與流程。
-              </p>
-              
-              <div className="w-full bg-gray-50 p-7 rounded-3xl border border-gray-100 text-left mb-10 group hover:border-blue-200 transition-colors">
-                <div className="flex items-center gap-2 mb-3">
-                  <Info size={14} className="text-blue-500" />
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">GitHub Secret 名稱</p>
-                </div>
-                <code className="text-sm font-mono text-blue-600 font-bold block bg-white p-4 rounded-xl border border-gray-200 shadow-inner group-hover:text-blue-700">API_KEY = "您的 Gemini 金鑰"</code>
-              </div>
+        {!isDemoMode && !user && (
+          <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-xl flex items-center justify-center p-10 overflow-y-auto">
+             <div className="bg-white rounded-[48px] shadow-2xl p-14 max-w-2xl w-full border border-gray-100 flex flex-col items-center animate-in zoom-in-95 duration-500 my-auto relative overflow-hidden">
+               {hasValidConfig && (
+                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500"></div>
+               )}
+               
+               <div className={`w-24 h-24 rounded-[32px] flex items-center justify-center text-white mb-10 shadow-2xl ring-8 transition-all duration-700 ${hasValidConfig ? 'bg-blue-600 shadow-blue-200 ring-blue-50 rotate-0' : 'bg-amber-500 shadow-amber-200 ring-amber-50 rotate-12'}`}>
+                 {hasValidConfig ? <ShieldCheck size={48} /> : <AlertTriangle size={48} />}
+               </div>
+               
+               <h2 className="text-4xl font-black text-gray-900 mb-2 tracking-tighter uppercase text-center">
+                 {hasValidConfig ? '雲端環境已就緒' : '系統待命中'}
+               </h2>
+               <p className="text-gray-500 mb-10 font-medium leading-relaxed max-w-md text-center">
+                 {hasValidConfig 
+                   ? '您的專屬 Firebase 雲端空間已成功連線。' 
+                   : '請先在 GitHub Secrets 設定金鑰，否則將無法保存專案。'}
+               </p>
 
-              <div className="flex flex-col gap-4 w-full">
-                <button 
-                  onClick={enableDemoCloud}
-                  className="w-full py-5 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-black transition-all active:scale-95 shadow-xl"
-                >
-                  <ShieldCheck size={20} />
-                  進入訪客展示模式
-                </button>
-                <p className="text-[11px] text-gray-400 font-medium">※ 展示模式將自動模擬 AI 語音與影像生成之邏輯</p>
-              </div>
-            </div>
+               {/* 系統診斷面板 */}
+               <div className="w-full bg-gray-50 rounded-[32px] p-8 border border-gray-100 mb-10 text-left">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <RefreshCw size={12} className={hasValidConfig ? "" : "animate-spin"} /> 系統診斷報告
+                  </h4>
+                  <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Firebase API Key</span>
+                        {firebaseConfig.apiKey ? <CheckCircle2 size={16} className="text-green-500" /> : <AlertTriangle size={16} className="text-amber-500" />}
+                     </div>
+                     <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">Gemini AI 大腦</span>
+                        {hasGeminiKey ? <CheckCircle2 size={16} className="text-green-500" /> : <Circle size={16} className="text-gray-200" />}
+                     </div>
+                     <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">專案 ID 讀取</span>
+                        <span className="text-[10px] font-mono bg-gray-200 px-2 py-1 rounded text-gray-600">{firebaseConfig.projectId || 'N/A'}</span>
+                     </div>
+                  </div>
+
+                  {!hasValidConfig && isLocalDev && (
+                    <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+                      <p className="text-blue-700 text-[11px] leading-relaxed flex items-center gap-2 font-bold mb-3">
+                         <Info size={14} /> 偵測到您正在使用開發環境
+                      </p>
+                      <a 
+                        href={githubPagesUrl} 
+                        target="_blank" 
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-blue-600 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-200"
+                      >
+                        開啟正式部署網址 <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  )}
+
+                  {!hasValidConfig && !isLocalDev && (
+                     <div className="mt-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+                        <p className="text-amber-800 text-[11px] leading-relaxed flex items-center gap-2 font-bold mb-2">
+                          <AlertTriangle size={14} /> 金鑰未生效？
+                        </p>
+                        <p className="text-amber-700 text-[10px] leading-relaxed">
+                          請確認 GitHub Actions 的 <b>Build</b> 步驟是否有出現紅色錯誤。若顯示成功，請按下 <b>Ctrl+F5</b> 強制刷新網頁。
+                        </p>
+                     </div>
+                  )}
+               </div>
+
+               <div className="flex flex-col gap-4 w-full">
+                 <button 
+                   onClick={handleLogin}
+                   disabled={!hasValidConfig || isLoggingIn}
+                   className={`w-full py-6 rounded-2xl font-black text-lg flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl ${
+                     hasValidConfig ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                   }`}
+                 >
+                   {isLoggingIn ? <Loader2 size={24} className="animate-spin" /> : hasValidConfig ? '使用 Google 帳號登入' : '金鑰部署中...'}
+                 </button>
+                 <button 
+                   onClick={() => { setIsDemoMode(true); showNotification("進入展示模式，資料將不會被儲存。", "info"); }}
+                   className="w-full py-5 bg-gray-50 text-gray-500 rounded-2xl font-bold hover:bg-gray-100 transition-all text-sm"
+                 >
+                   暫不登入，使用訪客展示模式
+                 </button>
+               </div>
+             </div>
           </div>
         )}
 
@@ -206,7 +244,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2 px-3 py-1 bg-gray-900 rounded-full">
                <Globe2 size={10} className={`text-blue-400 ${isDemoMode ? '' : 'animate-spin-slow'}`} />
                <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
-                {isDemoMode ? 'Sandbox' : 'Production'}
+                {user ? 'Cloud Live' : (isDemoMode ? 'Demo Sandbox' : 'Disconnected')}
                </span>
             </div>
           </div>
@@ -214,13 +252,18 @@ const App: React.FC = () => {
           <div className="flex items-center gap-6">
             <div className="text-right">
               <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest leading-none mb-1">AI Engine</p>
-              <p className={`text-[12px] font-black ${hasApiKey ? 'text-[#34C759]' : 'text-orange-500'}`}>
-                {hasApiKey ? 'LIVE' : (isDemoMode ? 'SIMULATED' : 'OFFLINE')}
+              <p className={`text-[12px] font-black ${hasGeminiKey ? 'text-[#34C759]' : 'text-orange-500'}`}>
+                {hasGeminiKey ? 'READY' : 'SIMULATED'}
               </p>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-[11px] font-black shadow-lg">
-              {userProfile?.name?.substring(0, 2).toUpperCase() || 'JD'}
-            </div>
+            {user ? (
+               <div className="flex items-center gap-3 bg-white border border-gray-100 p-1.5 pr-4 rounded-2xl shadow-sm">
+                  <img src={user.photoURL || ''} className="w-8 h-8 rounded-xl border border-gray-100" alt="profile" />
+                  <span className="text-xs font-bold text-gray-700">{user.displayName}</span>
+               </div>
+            ) : (
+               <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-[11px] font-black shadow-lg">JD</div>
+            )}
           </div>
         </header>
 
@@ -232,33 +275,27 @@ const App: React.FC = () => {
                 recentActions={actions} 
                 insights={insights}
                 onProjectSelect={(p) => { setSelectedProjectId(p.id); setActiveTab('projects'); }}
-                onInsightAction={handleInsightAction}
+                onInsightAction={() => showNotification("自動化腳本已更新至雲端", "success")}
               />
             )}
-            {activeTab === 'lab' && <SystemLab isCloudConnected={isCloudConnected} hasApiKey={hasApiKey} />}
+            {activeTab === 'lab' && <SystemLab isCloudConnected={!!user} hasApiKey={hasGeminiKey} />}
             {activeTab === 'creative' && <CreativeSuite />}
             {activeTab === 'projects' && selectedProject && (
               <ProjectDetails 
                 project={selectedProject} 
                 onBack={() => { setSelectedProjectId(null); setActiveTab('dashboard'); }}
-                onUpdateWorkflow={(phases) => handleUpdateWorkflow(selectedProject.id, phases)}
+                onUpdateWorkflow={async (phases) => {
+                  if (user && db) {
+                    await setDoc(doc(db, `users/${user.uid}/projects`, selectedProject.id), { phases }, { merge: true });
+                    showNotification("流程地圖已同步至雲端", "success");
+                  }
+                }}
               />
-            )}
-            {(activeTab === 'files' || activeTab === 'finance') && (
-               <div className="h-full flex flex-col items-center justify-center text-center p-10 bg-white rounded-[40px] border border-gray-100">
-                  <div className="w-20 h-20 bg-gray-50 rounded-3xl flex items-center justify-center mb-6 text-gray-300">
-                     <Globe2 size={40} />
-                  </div>
-                  <h3 className="text-2xl font-black text-gray-900 mb-2 tracking-tight">雲端數據連線中</h3>
-                  <p className="text-gray-400 text-sm max-w-sm font-medium">
-                    正在同步您的 Google Workspace 與財務報表。在展示模式下，此區塊將會呈現預設的模擬檔案。
-                  </p>
-               </div>
             )}
           </div>
         </div>
 
-        <VoiceAssistant onToolCall={handleToolCall} />
+        <VoiceAssistant onToolCall={(tool, args) => showNotification(`AI 指令執行: ${tool}`, "info")} />
       </main>
 
       <style dangerouslySetInnerHTML={{ __html: `

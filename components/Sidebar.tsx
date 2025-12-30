@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { LayoutDashboard, FolderKanban, Files, BadgeDollarSign, Settings, Beaker, Sparkles, ShieldAlert, CheckCircle2, UserRound } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Files, BadgeDollarSign, Settings, Beaker, Sparkles, ShieldAlert, CheckCircle2, UserRound, LogOut } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: 'dashboard' | 'projects' | 'files' | 'finance' | 'lab' | 'creative';
@@ -8,10 +7,11 @@ interface SidebarProps {
   isCloudConnected: boolean;
   isDemoMode: boolean;
   onConnect: () => void;
+  onLogout: () => void;
   onEnableDemo: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isCloudConnected, isDemoMode, onConnect, onEnableDemo }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isCloudConnected, isDemoMode, onConnect, onLogout, onEnableDemo }) => {
   const menuItems = [
     { id: 'dashboard', label: '總覽', icon: LayoutDashboard },
     { id: 'projects', label: '專案管理', icon: FolderKanban },
@@ -34,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isCloudConne
           </div>
           <div>
             <h2 className="font-bold text-lg tracking-tight text-gray-900 leading-tight">DesignPro</h2>
-            <p className="text-[10px] font-black text-[#007AFF] uppercase tracking-[0.15em]">AI Agent OS</p>
+            <p className="text-[10px] font-black text-[#007AFF] uppercase tracking-[0.15em]">Firebase Cloud</p>
           </div>
         </div>
 
@@ -64,47 +64,53 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isCloudConne
 
       <div className="mt-auto p-6 space-y-5">
         <div className={`p-4 rounded-[22px] transition-all border ${
-          isCloudConnected ? (isDemoMode ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200') : 'bg-gray-100 border-gray-200'
+          isCloudConnected ? 'bg-green-50 border-green-200' : (isDemoMode ? 'bg-amber-50 border-amber-200' : 'bg-gray-100 border-gray-200')
         }`}>
           <div className="flex items-center gap-2.5 mb-2">
             {isCloudConnected ? (
-              isDemoMode ? <ShieldAlert size={12} className="text-amber-500" /> : <CheckCircle2 size={12} className="text-green-500" />
+              <div className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </div>
             ) : (
               <div className="w-2 h-2 rounded-full bg-gray-300"></div>
             )}
             <span className="text-[11px] font-bold text-gray-800 tracking-tight">
-              {isCloudConnected ? (isDemoMode ? 'Visitor Mode' : 'Cloud Bridge Active') : 'Cloud Integration'}
+              {isCloudConnected ? 'Firestore 已同步' : (isDemoMode ? '展示模式' : '雲端連線未開啟')}
             </span>
           </div>
           <p className="text-[10px] text-gray-500 leading-relaxed font-medium">
             {isCloudConnected 
-              ? (isDemoMode ? '目前以訪客模式運行，AI 已解鎖模擬雲端能力。' : 'Google Workspace 已成功同步。') 
-              : '建議先嘗試「Google 登入」，若失敗可切換至「展示模式」。'}
+              ? '您的資料已安全備份至 Firebase。' 
+              : '建議登入以開啟專案持久化存儲。'}
           </p>
           
-          {!isCloudConnected && (
+          {!isCloudConnected && !isDemoMode && (
             <div className="mt-3 flex flex-col gap-2">
               <button 
                 onClick={onConnect}
                 className="w-full py-2 bg-[#007AFF] text-white text-[10px] font-bold rounded-[10px] hover:bg-[#0062cc] transition shadow-lg shadow-blue-100 active:scale-95"
               >
-                Google 登入
-              </button>
-              <button 
-                onClick={onEnableDemo}
-                className="w-full py-2 bg-white border border-gray-200 text-gray-600 text-[10px] font-bold rounded-[10px] hover:bg-gray-50 transition active:scale-95 flex items-center justify-center gap-1.5"
-              >
-                <UserRound size={12} />
-                以訪客模式啟動 (展示用)
+                Firebase 登入
               </button>
             </div>
           )}
         </div>
 
-        <button className="flex items-center gap-3.5 text-gray-400 hover:text-gray-900 transition-all w-full px-3 py-2 active:scale-95">
-          <Settings size={18} />
-          <span className="text-[13px] font-medium tracking-tight">個人與偏好設定</span>
-        </button>
+        {isCloudConnected ? (
+          <button 
+            onClick={onLogout}
+            className="flex items-center gap-3.5 text-gray-400 hover:text-red-500 transition-all w-full px-3 py-2 active:scale-95"
+          >
+            <LogOut size={18} />
+            <span className="text-[13px] font-medium tracking-tight">登出系統</span>
+          </button>
+        ) : (
+          <button className="flex items-center gap-3.5 text-gray-400 hover:text-gray-900 transition-all w-full px-3 py-2 active:scale-95">
+            <Settings size={18} />
+            <span className="text-[13px] font-medium tracking-tight">偏好設定</span>
+          </button>
+        )}
       </div>
     </aside>
   );
