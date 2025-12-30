@@ -33,37 +33,18 @@ const App: React.FC = () => {
   
   const isProduction = window.location.hostname.includes('github.io');
   
-  // 安全讀取環境變數的方法
-  const safeGetEnv = (key: string): string => {
-    try {
-      // @ts-ignore
-      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
-        // @ts-ignore
-        return import.meta.env[key];
-      }
-      if (typeof process !== 'undefined' && process.env && process.env[key]) {
-        return process.env[key] || '';
-      }
-    } catch (e) {}
-    return '';
-  };
-
-  // 優先從 Vite 注入的變數讀取 (GitHub Pages)，次之從 process.env (AI Studio) 讀取
-  const finalApiKey = safeGetEnv('VITE_API_KEY') || safeGetEnv('API_KEY') || '';
+  // 優先嘗試 Vite 靜態替換，次之嘗試 process.env
+  const finalApiKey = import.meta.env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : '') || '';
   const hasGeminiKey = finalApiKey.length > 5;
 
   const requiredSecrets = [
     { name: 'API_KEY', value: finalApiKey, label: 'Gemini AI 大腦' },
     { name: 'FIREBASE_API_KEY', value: firebaseConfig.apiKey, label: 'Firebase 金鑰' },
     { name: 'FIREBASE_PROJECT_ID', value: firebaseConfig.projectId, label: '專案 ID' },
-    { name: 'FIREBASE_AUTH_DOMAIN', value: firebaseConfig.authDomain, label: '授權網域' },
-    { name: 'FIREBASE_APP_ID', value: firebaseConfig.appId, label: '應用程式 ID' },
-    { name: 'FIREBASE_STORAGE_BUCKET', value: firebaseConfig.storageBucket, label: '存儲桶' },
-    { name: 'FIREBASE_MESSAGING_SENDER_ID', value: firebaseConfig.messagingSenderId, label: '發送者 ID' },
   ];
 
   const readyCount = requiredSecrets.filter(s => !!s.value && s.value.length > 5).length;
-  const isAllReady = readyCount === 7;
+  const isAllReady = readyCount === requiredSecrets.length;
 
   useEffect(() => {
     if (!auth || !db) return;
@@ -99,7 +80,7 @@ const App: React.FC = () => {
 
   const handleLogin = async () => {
     if (!hasValidConfig || !auth) {
-      showNotification("金鑰未同步，請確認是否在正式網址訪問並已完成編譯。", "warning");
+      showNotification("Firebase 配置不完整，無法登入。", "warning");
       return;
     }
     setIsLoggingIn(true);
@@ -109,7 +90,7 @@ const App: React.FC = () => {
       showNotification("雲端連線成功！", "success");
     } catch (error: any) {
       console.error("Login failed:", error);
-      showNotification("登入失敗，請檢查 Firebase Console 授權網域設定。", "warning");
+      showNotification("登入失敗，請確認 Firebase 設定。", "warning");
     } finally { setIsLoggingIn(false); }
   };
 
@@ -123,7 +104,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F5F5F7]">
-      {/* Notifications */}
       <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[400] flex flex-col gap-3 w-full max-w-md pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className={`flex items-center justify-between p-5 rounded-2xl shadow-2xl border backdrop-blur-2xl animate-in slide-in-from-top-4 duration-500 pointer-events-auto ${
@@ -150,7 +130,7 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {!isDemoMode && !user && (
           <div className="absolute inset-0 z-[100] bg-white/60 backdrop-blur-xl flex items-center justify-center p-10 overflow-y-auto">
-             <div className="bg-white rounded-[48px] shadow-2xl p-14 max-w-2xl w-full border border-gray-100 flex flex-col items-center animate-in zoom-in-95 duration-500 my-auto relative overflow-hidden">
+             <div className="bg-white rounded-[48px] shadow-2xl p-14 max-w-2xl w-full border border-gray-100 flex flex-col items-center animate-in zoom-in-95 duration-500 my-auto relative">
                
                <div className="absolute top-0 right-0 p-8">
                   <div className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest ${isProduction ? 'bg-green-50 border-green-100 text-green-600' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
@@ -166,27 +146,14 @@ const App: React.FC = () => {
                <h2 className="text-4xl font-black text-gray-900 mb-2 tracking-tighter uppercase text-center">
                  {isAllReady ? '核心配置已解鎖' : '配置等待中'}
                </h2>
-               <p className="text-gray-500 mb-6 font-medium leading-relaxed max-w-md text-center">
-                 {isAllReady ? '您的環境變數已成功注入！您可以開始同步設計資料。' : `GitHub Secrets 偵測進度：${readyCount}/7。`}
+               <p className="text-gray-500 mb-8 font-medium leading-relaxed max-w-md text-center">
+                 {isAllReady ? '您的 GitHub Secrets 已成功注入編譯檔！' : `請在 GitHub Repository 設定 Secrets。目前進度：${readyCount}/${requiredSecrets.length}`}
                </p>
-
-               <div className="w-full bg-blue-50 border border-blue-100 p-5 rounded-3xl mb-8 flex gap-4">
-                  <Info className="text-blue-500 shrink-0" size={24} />
-                  <div className="text-left">
-                    <p className="text-[12px] font-black text-blue-900 mb-1">診斷訊息：</p>
-                    <p className="text-[10px] text-blue-700 leading-normal">
-                      1. 請確認 GitHub Repository 的 Secrets 設定與變數名一致。<br />
-                      2. 每次更改 Secrets 後，必須手動觸發一次 Actions 重新 Build。<br />
-                      3. 若正式網址仍顯示紅燈，代表 Actions 尚未跑完或 Build Time 注入失敗。
-                    </p>
-                  </div>
-               </div>
 
                <div className="w-full bg-gray-50 rounded-[32px] p-8 border border-gray-100 mb-10 text-left">
                   <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                    <RefreshCw size={12} className={isAllReady ? "" : "animate-spin"} /> 變數同步診斷
+                    <RefreshCw size={12} className={isAllReady ? "" : "animate-spin"} /> 變數同步狀態
                   </h4>
-                  
                   <div className="grid grid-cols-1 gap-3">
                     {requiredSecrets.map((s) => (
                       <div key={s.name} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
@@ -206,7 +173,7 @@ const App: React.FC = () => {
 
                <div className="flex flex-col gap-4 w-full">
                  <button onClick={handleLogin} disabled={!isAllReady || isLoggingIn} className={`w-full py-6 rounded-2xl font-black text-lg flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl ${isAllReady ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
-                   {isLoggingIn ? <Loader2 size={24} className="animate-spin" /> : '正式登入系統'}
+                   {isLoggingIn ? <Loader2 size={24} className="animate-spin" /> : '登入系統'}
                  </button>
                  <button onClick={() => setIsDemoMode(true)} className="w-full py-5 bg-white text-blue-600 rounded-2xl font-black hover:bg-blue-50 transition-all text-sm border border-blue-100 active:scale-95">
                    進入訪客演示模式
@@ -226,14 +193,6 @@ const App: React.FC = () => {
                <Globe2 size={10} className={`text-blue-400 ${isDemoMode ? '' : 'animate-spin-slow'}`} />
                <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">{user ? 'Cloud Sync' : 'Sandbox'}</span>
             </div>
-          </div>
-          <div className="flex items-center gap-6">
-            {user ? (
-               <div className="flex items-center gap-3 bg-white border border-gray-100 p-1.5 pr-4 rounded-2xl shadow-sm">
-                  <img src={user.photoURL || ''} className="w-8 h-8 rounded-xl border border-gray-100" alt="profile" />
-                  <span className="text-xs font-bold text-gray-700">{user.displayName}</span>
-               </div>
-            ) : <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-[11px] font-black shadow-lg">DP</div>}
           </div>
         </header>
 
