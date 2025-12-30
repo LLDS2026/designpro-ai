@@ -33,17 +33,18 @@ const App: React.FC = () => {
   
   const isProduction = window.location.hostname.includes('github.io');
   
-  // 優先嘗試 Vite 靜態替換，次之嘗試 process.env
-  const finalApiKey = import.meta.env.VITE_API_KEY || (typeof process !== 'undefined' ? process.env.API_KEY : '') || '';
+  // Gemini API Key 讀取
+  const finalApiKey = (typeof process !== 'undefined' ? process.env.API_KEY : '') || import.meta.env.VITE_API_KEY || '';
   const hasGeminiKey = finalApiKey.length > 5;
 
+  // 診斷清單：必須與 firebase.ts 中的 firebaseConfig 同步
   const requiredSecrets = [
     { name: 'API_KEY', value: finalApiKey, label: 'Gemini AI 大腦' },
     { name: 'FIREBASE_API_KEY', value: firebaseConfig.apiKey, label: 'Firebase 金鑰' },
     { name: 'FIREBASE_PROJECT_ID', value: firebaseConfig.projectId, label: '專案 ID' },
   ];
 
-  const readyCount = requiredSecrets.filter(s => !!s.value && s.value.length > 5).length;
+  const readyCount = requiredSecrets.filter(s => !!s.value && s.value.length > 2).length;
   const isAllReady = readyCount === requiredSecrets.length;
 
   useEffect(() => {
@@ -80,7 +81,7 @@ const App: React.FC = () => {
 
   const handleLogin = async () => {
     if (!hasValidConfig || !auth) {
-      showNotification("Firebase 配置不完整，無法登入。", "warning");
+      showNotification("Firebase 配置不完整，無法啟動連線。", "warning");
       return;
     }
     setIsLoggingIn(true);
@@ -90,7 +91,7 @@ const App: React.FC = () => {
       showNotification("雲端連線成功！", "success");
     } catch (error: any) {
       console.error("Login failed:", error);
-      showNotification("登入失敗，請確認 Firebase 設定。", "warning");
+      showNotification("登入失敗，請確認 Firebase Console 授權網域設定。", "warning");
     } finally { setIsLoggingIn(false); }
   };
 
@@ -158,10 +159,10 @@ const App: React.FC = () => {
                     {requiredSecrets.map((s) => (
                       <div key={s.name} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl">
                         <div className="flex items-center gap-3">
-                           {s.value && s.value.length > 5 ? <CheckCircle2 size={16} className="text-green-500" /> : <Circle size={16} className="text-gray-200" />}
+                           {s.value && s.value.length > 2 ? <CheckCircle2 size={16} className="text-green-500" /> : <Circle size={16} className="text-gray-200" />}
                            <span className="text-xs font-bold text-gray-700">{s.label}</span>
                         </div>
-                        {s.value && s.value.length > 5 ? (
+                        {s.value && s.value.length > 2 ? (
                           <span className="text-[10px] font-mono bg-green-50 text-green-700 px-2 py-1 rounded border border-green-100">DETECTED</span>
                         ) : (
                           <span className="text-[10px] font-mono bg-gray-100 text-gray-400 px-2 py-1 rounded">MISSING</span>
