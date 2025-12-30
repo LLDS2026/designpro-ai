@@ -1,6 +1,7 @@
+
 import React, { useState, useRef } from 'react';
-import { GoogleGenAI } from '@google/genai';
-import { Sparkles, Image as ImageIcon, Wand2, Paintbrush, Download, Upload, Loader2, Maximize2, Video, PlayCircle, Key } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
+import { Sparkles, ImageIcon, Wand2, Paintbrush, Download, Upload, Loader2, Maximize2, Video, PlayCircle, Key } from 'lucide-react';
 
 const CreativeSuite: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'simulator' | 'lab' | 'veo'>('simulator');
@@ -66,8 +67,12 @@ const CreativeSuite: React.FC = () => {
         const blob = await videoResponse.blob();
         setGeneratedVideoUrl(URL.createObjectURL(blob));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Video generation failed:', error);
+      if (error?.message?.includes("Requested entity was not found")) {
+         // @ts-ignore
+         if (typeof window.aistudio !== 'undefined') await window.aistudio.openSelectKey();
+      }
       alert('影片生成失敗，請確認是否已在 AISTUDIO 選擇付費 API Key。');
     } finally {
       setIsGenerating(false);
@@ -81,6 +86,8 @@ const CreativeSuite: React.FC = () => {
     setStatusMessage('AI 正在構思您的設計...');
     
     try {
+      // Mandatory check for high-quality image models
+      await checkAndOpenKey();
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const contents = {
         parts: [{ text: `High-end design render: ${prompt}. Photorealistic, 8k.` }]
@@ -88,20 +95,26 @@ const CreativeSuite: React.FC = () => {
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-image-preview',
-        contents: contents as any,
+        contents: contents,
         config: {
           imageConfig: { aspectRatio: "16:9", imageSize: "1K" }
         }
       });
 
-      for (const part of (response as any).candidates[0].content.parts) {
-        if (part.inlineData) {
-          setGeneratedImageUrl(`data:image/png;base64,${part.inlineData.data}`);
-          break;
+      if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            setGeneratedImageUrl(`data:image/png;base64,${part.inlineData.data}`);
+            break;
+          }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Generation failed:', error);
+      if (error?.message?.includes("Requested entity was not found")) {
+         // @ts-ignore
+         if (typeof window.aistudio !== 'undefined') await window.aistudio.openSelectKey();
+      }
     } finally {
       setIsGenerating(false);
       setStatusMessage('');

@@ -1,14 +1,10 @@
 
-import { initializeApp, getApp, getApps } from 'firebase/app';
-import type { FirebaseApp } from 'firebase/app';
-// Fix: Separate type and value imports for Firebase Auth
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import type { Auth } from 'firebase/auth';
-// Fix: Separate type and value imports for Firestore
-import { getFirestore } from 'firebase/firestore';
-import type { Firestore } from 'firebase/firestore';
+// Fix: Use scoped @firebase packages directly to resolve exported member errors in restricted environments
+import { initializeApp, getApp, getApps, type FirebaseApp } from '@firebase/app';
+import { getAuth, GoogleAuthProvider, type Auth } from '@firebase/auth';
+import { getFirestore, type Firestore } from '@firebase/firestore';
 
-// These values are injected by vite.config.ts at build time from GitHub Secrets
+// Values injected from GitHub Secrets via vite.config.ts
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY || '',
   authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
@@ -23,20 +19,24 @@ let auth: Auth | undefined;
 let db: Firestore | undefined;
 const googleProvider = new GoogleAuthProvider();
 
-// 嚴謹檢查金鑰是否有效
-const hasValidConfig = !!(firebaseConfig.apiKey && firebaseConfig.apiKey.length > 20);
+// Strict check for configuration validity
+const hasValidConfig = !!(
+  firebaseConfig.apiKey && firebaseConfig.apiKey.length > 20 &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId
+);
 
 if (hasValidConfig) {
   try {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     db = getFirestore(app);
-    console.log("✅ Firebase 雲端服務載入成功", { project: firebaseConfig.projectId });
+    console.log("✅ Firebase Service Loaded Successfully", { project: firebaseConfig.projectId });
   } catch (error) {
-    console.error("❌ Firebase 初始化異常:", error);
+    console.error("❌ Firebase Initialization Error:", error);
   }
 } else {
-  console.warn("⚠️ Firebase 金鑰不完整，系統將維持訪客/展示模式。");
+  console.warn("⚠️ Firebase configuration missing. App running in offline simulation mode.");
 }
 
 export { auth, db, googleProvider, hasValidConfig, firebaseConfig };

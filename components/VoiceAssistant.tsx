@@ -1,8 +1,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 // Fix: Use correct import format for GoogleGenAI as per guidelines
-import {GoogleGenAI, Modality, Type} from "@google/genai";
-import type { LiveServerMessage, FunctionDeclaration, Blob } from '@google/genai';
+import { GoogleGenAI, Modality, Type, LiveServerMessage, FunctionDeclaration, Blob } from "@google/genai";
 
 // Audio decoding and encoding helpers as per Gemini API guidelines
 function decode(base64: string) {
